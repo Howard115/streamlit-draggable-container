@@ -3,7 +3,10 @@ root = window.parent.document;
 
 let dropZones = [];
 let namedDropZones = {};
-let draggedElement = null;
+let draggedElement = {
+    current: null,
+    previous: null
+};
 let dragIndex = 0;
 
 
@@ -11,8 +14,181 @@ function dragStart(event) {
     // console.log('drag start');
     // console.log("event: ", event);
     if (event.target.draggable){
-        draggedElement = event.target;
+        draggedElement.previous = draggedElement.current;
+        draggedElement.current = event.target;
+        console.log("current dragged element: ", draggedElement.current);
     }
+}
+
+function turnOnDrag(container, parent) {
+    // If the container has the class 'no-drag-handle', then the parent container will be draggable.
+    if (container.classList.contains('no-drag-handle')) {
+        parent.draggable = true;
+    }
+    // If the container has the class 'drag-handle', then the parent container will be draggable when the mouse hovers over the handle element.
+    // The handle element is the element that has the class 'drag-handle'.
+    else {
+        parent.querySelectorAll('.drag-handle')?.forEach(handle => {
+            handle.addEventListener('mouseover', function(event) {
+                parent.draggable = true;
+            });
+            handle.addEventListener('mouseout', function(event) {
+                parent.draggable = false;
+            });
+        });
+    }
+}
+
+function setupDropZone(dropZone){
+        // Add event listeners for dragover, dragleave, and drop
+        //  dragLeave: remove floating dots if mouse leaves drop container
+        //  dragOver: add floating dots to show where element will be dropped
+        //  drop: insert dragged element at location of drop in dropZone
+        dropZone?.addEventListener('dragleave', function(event) {
+            event.preventDefault();
+
+            //make cursor/point the copy cursor
+            event.dataTransfer.dropEffect = 'copy';
+
+            // console.log(event);
+            // console.log(dropZone);
+
+            // Set remove to true. If the mouse leaves the drop zone, remove the floating dots.
+            let remove = true;
+            let container = event.fromElement;
+            while (container && container.tagName !== 'BODY') {
+                container = container.parentNode;
+                if (container === dropZone) {
+                    remove = false;
+                }
+            }
+            if (remove && event.fromElement !== dropZone && !event.fromElement.classList.contains('floating-dot')) {
+                const dots = root.querySelectorAll('.floating-dot');
+                // console.log('remove dots dragleave');
+                dots.forEach(dot => {
+                    dot.remove();
+                });
+            }
+        });
+        dropZone?.addEventListener('dragover', function(event) {
+            event.preventDefault();
+            // console.log(event.target);
+            
+            //make cursor/point the copy cursor
+            event.dataTransfer.dropEffect = 'copy';
+
+            const rect = dropZone.getBoundingClientRect();
+            const y = event.clientY - rect.top;
+            const children = Array.from(dropZone.children);
+            let i = 0;
+            for (const child of children) {
+                // console.log(child.offsetTop + child.offsetHeight / 2, y);
+                if (child.offsetTop + child.offsetHeight / 2 < y) {
+                    i++;
+                }
+            }
+
+            if (i === dragIndex) {
+                return;
+            }
+            else {
+                // remove any floating dots
+                // console.log('remove dots' , i, dragIndex);
+                const dots = root.querySelectorAll('.floating-dot');
+                dots.forEach(dot => {
+                    dot.remove();
+                });
+            }
+            dragIndex = i;
+
+            // console.log(i);
+            try{
+                if (children[i] !== draggedElement.current && children[i] !== draggedElement.current.nextSibling) {
+                    const dot = document.createElement('div');
+                    dot.style.position = 'absolute';
+                    // dot.style.width = '4px';
+                    // dot.style.height = '4px';
+                    // dot.style.backgroundColor = '#444444';
+                    // dot.style.borderRadius = '50%';
+                    dot.style.width = '8%';
+                    dot.style.height = '4px';
+                    dot.style.backgroundColor = '#444444';
+                    dot.style.borderRadius = '2px';
+                    dot.style.left = '46%';
+                    if (i === children.length) {
+                        dot.style.top = rect.top + children[i-1].offsetTop + children[i-1].offsetHeight + 10 + 'px';
+                    } else {
+                        dot.style.top = rect.top + children[i].offsetTop - 10 + 'px';
+                    }
+                    dot.classList.add('floating-dot');
+                    dropZone.parentNode.insertBefore(dot, dropZone);
+                }
+            } catch (e) {
+                console.warn("Dragged element has no draggable container parent detected. Drag and drop may not work as expected.", e);
+            }
+            
+        });
+        dropZone?.addEventListener('drop', function(event) { 
+            event.preventDefault();
+           
+            // console.log(event)
+            // remove any floating dots
+            const dots = root.querySelectorAll('.floating-dot');
+            dots.forEach(dot => {
+                dot.remove();
+            });
+            
+            // console.log('drop');
+            // console.log(event);
+            // insert parent at location of drop in dropZone
+            const rect = dropZone.getBoundingClientRect();
+            const y = event.clientY - rect.top;
+            const children = Array.from(dropZone.children);
+            let i = 0;
+            for (const child of children) {
+                // console.log(child.offsetTop + child.offsetHeight / 2, y);
+                if (child.offsetTop + child.offsetHeight / 2 < y) {
+                    i++;
+                }
+            }
+            // console.log(i);
+            try{
+                dropZone.insertBefore(draggedElement.current, children[i]);
+            } catch (e) {
+                console.warn("Draggable container not found.", e);
+            }
+            draggedElement.previous = draggedElement.current;
+            draggedElement.current = null;
+        });
+}
+
+function removeProxyElements() {
+    // hide iframe that contains div with class 'elim' to remove script container from
+    // potential drop destination and prevent it from interfering with drag and drop
+    const iframe = root.querySelectorAll('iframe');
+    iframe.forEach(frame => {
+        const div = frame.contentDocument.querySelectorAll('.elim');
+        console.log("elim divs: ", div);
+        if (div.length > 0) {
+            console.log('hide iframe');
+            frame.parentNode.style.display = 'none';
+        }
+
+        if (frame.srcdoc.includes('<div class="elim"></div>')){
+            console.log('hide iframe');
+            frame.parentNode.style.display = 'none';
+        }
+    });
+
+    // hide element-container containing div with class 'elim' to hide markdown 
+    // elements that are added for drag and drop purposes
+    const elements = root.querySelectorAll('[data-testid="element-container"]');
+    elements.forEach(element => {
+        const div = element.querySelector('.elim');
+        if (div) {
+            element.style.display = 'none';
+        }
+    });
 }
 
 draggableContainers = root.querySelectorAll('.draggable-parent');
@@ -29,142 +205,18 @@ draggableContainers.forEach(container => {
         if (parent.dataset.testid === 'stVerticalBlockBorderWrapper') {
             // console.log(parent);
 
-            // If the container has the class 'no-drag-handle', then the parent container will be draggable.
-            if (container.classList.contains('no-drag-handle')) {
-                parent.draggable = true;
-            }
-            // If the container has the class 'drag-handle', then the parent container will be draggable when the mouse hovers over the handle element.
-            // The handle element is the element that has the class 'drag-handle'.
-            else {
-                parent.querySelectorAll('.drag-handle')?.forEach(handle => {
-                    handle.addEventListener('mouseover', function(event) {
-                        parent.draggable = true;
-                    });
-                    handle.addEventListener('mouseout', function(event) {
-                        parent.draggable = false;
-                    });
-                });
-            }
+            // Turn on drag
+            turnOnDrag(container, parent);
+
             // If the container has the class 'no-destination', then the parent container will be set as the drop zone.
             if (container.classList.contains('no-destination')) {
                 // if dropZones doesnt contain parent.parentNode, add it
                 const dropZone = parent.parentNode;
+                // if dropZone is not already in dropZones, add it and set it up
                 if (!dropZones.includes(dropZone)) {
                     dropZones.push(dropZone);
                      // also remove dot if mouse leaves drop container
-                     dropZone?.addEventListener('dragleave', function(event) {
-                        event.preventDefault();
-
-                        //make cursor/point the copy cursor
-                        event.dataTransfer.dropEffect = 'copy';
-
-                        // console.log(event);
-                        // console.log(dropZone);
-                        let remove = true;
-                        let container = event.fromElement;
-                        while (container && container.tagName !== 'BODY') {
-                            container = container.parentNode;
-                            if (container === dropZone) {
-                                remove = false;
-                            }
-                        }
-                        if (remove && event.fromElement !== dropZone && !event.fromElement.classList.contains('floating-dot')) {
-                            const dots = root.querySelectorAll('.floating-dot');
-                            // console.log('remove dots dragleave');
-                            dots.forEach(dot => {
-                                dot.remove();
-                            });
-                        }
-                    });
-                    dropZone?.addEventListener('dragover', function(event) {
-                        event.preventDefault();
-                        // console.log(event.target);
-                        
-                        //make cursor/point the copy cursor
-                        event.dataTransfer.dropEffect = 'copy';
-
-                        const rect = dropZone.getBoundingClientRect();
-                        const y = event.clientY - rect.top;
-                        const children = Array.from(dropZone.children);
-                        let i = 0;
-                        for (const child of children) {
-                            // console.log(child.offsetTop + child.offsetHeight / 2, y);
-                            if (child.offsetTop + child.offsetHeight / 2 < y) {
-                                i++;
-                            }
-                        }
-
-                        if (i === dragIndex) {
-                            return;
-                        }
-                        else {
-                            // remove any floating dots
-                            // console.log('remove dots' , i, dragIndex);
-                            const dots = root.querySelectorAll('.floating-dot');
-                            dots.forEach(dot => {
-                                dot.remove();
-                            });
-                        }
-                        dragIndex = i;
-
-                        // console.log(i);
-                        try{
-                            if (children[i] !== draggedElement && children[i] !== draggedElement.nextSibling) {
-                                const dot = document.createElement('div');
-                                dot.style.position = 'absolute';
-                                // dot.style.width = '4px';
-                                // dot.style.height = '4px';
-                                // dot.style.backgroundColor = '#444444';
-                                // dot.style.borderRadius = '50%';
-                                dot.style.width = '8%';
-                                dot.style.height = '4px';
-                                dot.style.backgroundColor = '#444444';
-                                dot.style.borderRadius = '2px';
-                                dot.style.left = '46%';
-                                if (i === children.length) {
-                                    dot.style.top = rect.top + children[i-1].offsetTop + children[i-1].offsetHeight + 10 + 'px';
-                                } else {
-                                    dot.style.top = rect.top + children[i].offsetTop - 10 + 'px';
-                                }
-                                dot.classList.add('floating-dot');
-                                dropZone.parentNode.insertBefore(dot, dropZone);
-                            }
-                        } catch (e) {
-                            console.warn("Dragged element has no draggable container parent detected. Drag and drop may not work as expected.", e);
-                        }
-                        
-                    });
-                    dropZone?.addEventListener('drop', function(event) { 
-                        event.preventDefault();
-                       
-                        // console.log(event)
-                        // remove any floating dots
-                        const dots = root.querySelectorAll('.floating-dot');
-                        dots.forEach(dot => {
-                            dot.remove();
-                        });
-                        
-                        // console.log('drop');
-                        // console.log(event);
-                        // insert parent at location of drop in dropZone
-                        const rect = dropZone.getBoundingClientRect();
-                        const y = event.clientY - rect.top;
-                        const children = Array.from(dropZone.children);
-                        let i = 0;
-                        for (const child of children) {
-                            // console.log(child.offsetTop + child.offsetHeight / 2, y);
-                            if (child.offsetTop + child.offsetHeight / 2 < y) {
-                                i++;
-                            }
-                        }
-                        // console.log(i);
-                        try{
-                            dropZone.insertBefore(draggedElement, children[i]);
-                        } catch (e) {
-                            console.warn("Draggable container not found.", e);
-                        }
-                        draggedElement = null;
-                    });
+                    setupDropZone(dropZone);
                 }
             }
             else {
@@ -197,7 +249,7 @@ Object.keys(namedDropZones).forEach(key => {
             if (parent.dataset.testid === 'stVerticalBlock') {
                 const dropZone = parent;
 
-                dropZone?.addEventListener('dragleave', function(event) {
+                dropZone?.addEventListener('dragleave', function(event) { 
                     event.preventDefault();
 
                     //make cursor/point the copy cursor
@@ -223,7 +275,7 @@ Object.keys(namedDropZones).forEach(key => {
                 dropZone?.addEventListener('dragover', function(event) {
                     event.preventDefault();
 
-                    if (namedDropZones[key].includes(draggedElement)) {
+                    if (namedDropZones[key].includes(draggedElement.current)) {
                         
                         console.log(event.target);
 
@@ -255,7 +307,7 @@ Object.keys(namedDropZones).forEach(key => {
 
                         // console.log(i);
                         try{
-                            if (children[i] !== draggedElement && children[i] !== draggedElement.nextSibling) {
+                            if (children[i] !== draggedElement.current && children[i] !== draggedElement.current.nextSibling) {
                                 const dot = document.createElement('div');
                                 dot.style.position = 'absolute';
                                 // dot.style.width = '4px';
@@ -282,7 +334,7 @@ Object.keys(namedDropZones).forEach(key => {
                 });
 
                 dropZone?.addEventListener('drop', function(event) {
-                    if (namedDropZones[key].includes(draggedElement)) {
+                    if (namedDropZones[key].includes(draggedElement.current)) {
                         event.preventDefault();
                         // console.log(event)
                         // remove any floating dots
@@ -306,11 +358,12 @@ Object.keys(namedDropZones).forEach(key => {
                         }
                         // console.log(i);
                         try{
-                            dropZone.insertBefore(draggedElement, children[i]);
+                            dropZone.insertBefore(draggedElement,current, children[i]);
                         } catch (e) {
                             console.warn("Dragged element has no destination container detected. Drag and drop may not work as expected.", e);
                         }
-                        draggedElement = null;
+                        draggedElement.previous = draggedElement.current;
+                        draggedElement.current = null;
                     }
                 });
                 break;
@@ -320,22 +373,4 @@ Object.keys(namedDropZones).forEach(key => {
     }
 });
 
-// hide iframe that contains div with class 'elim' to remove script container from
-// potential drop destination and prevent it from interfering with drag and drop
-const iframe = root.querySelectorAll('iframe');
-iframe.forEach(frame => {
-    const div = frame.contentDocument.querySelector('.elim');
-    if (frame.parentNode.dataset.testid === 'element-container') {
-        frame.parentNode.style.display = 'none';
-    }
-});
-
-// hide element-container containing div with class 'elim' to hide markdown 
-// elements that are added for drag and drop purposes
-const elements = root.querySelectorAll('[data-testid="element-container"]');
-elements.forEach(element => {
-    const div = element.querySelector('.elim');
-    if (div) {
-        element.style.display = 'none';
-    }
-});
+removeProxyElements();

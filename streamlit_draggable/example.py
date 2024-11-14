@@ -30,7 +30,7 @@ with container3:
     st.info("This one has no drag handle. Grab it from anywhere inside the container.")
     st.warning("Now that every mouse click and drag is treated as an attempt to move this container, you can no longer select text inside the container.")
 
-container4 = destination_container("test1", border=True)
+container4 = destination_container("test1 destination-parent", border=True)
 
 with container4:
     st.write("This is destination container")
